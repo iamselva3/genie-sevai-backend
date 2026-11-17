@@ -1,0 +1,10 @@
+# Optional local MongoDB for the API: docker compose up -d mongo
+services:
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - sevai-mongo:/data/db
+volumes:
+  sevai-mongo:
