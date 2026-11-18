@@ -26,9 +26,13 @@ const addressSchema = new Schema<IAddress>({
 });
 
 export interface ICustomer {
+  /** Google account id; customers sign in with Google. */
+  googleId?: string;
+  /** Contact number for the professional; asked after the first sign-in and needed to book. */
   phone: string;
   name: string;
   email: string;
+  avatarUrl: string;
   addresses: Types.DocumentArray<IAddress>;
   isBlocked: boolean;
   lastLoginAt?: Date;
@@ -36,9 +40,11 @@ export interface ICustomer {
 
 const customerSchema = new Schema<ICustomer>(
   {
-    phone: { type: String, required: true, unique: true, trim: true },
+    googleId: { type: String, unique: true, sparse: true },
+    phone: { type: String, default: '', trim: true },
     name: { type: String, default: '', trim: true },
-    email: { type: String, default: '', trim: true, lowercase: true },
+    email: { type: String, default: '', trim: true, lowercase: true, index: true },
+    avatarUrl: { type: String, default: '' },
     addresses: { type: [addressSchema], default: [] },
     isBlocked: { type: Boolean, default: false },
     lastLoginAt: Date,
@@ -48,25 +54,6 @@ const customerSchema = new Schema<ICustomer>(
 
 export const Customer = mongoose.model<ICustomer>('Customer', customerSchema);
 export type CustomerDoc = HydratedDocument<ICustomer>;
-
-/* ---------------- OTP ---------------- */
-export interface IOtp {
-  phone: string;
-  codeHash: string;
-  expiresAt: Date;
-  attempts: number;
-  lastSentAt: Date;
-}
-
-const otpSchema = new Schema<IOtp>({
-  phone: { type: String, required: true, unique: true },
-  codeHash: { type: String, required: true },
-  expiresAt: { type: Date, required: true, index: { expires: 0 } },
-  attempts: { type: Number, default: 0 },
-  lastSentAt: { type: Date, default: () => new Date() },
-});
-
-export const Otp = mongoose.model<IOtp>('Otp', otpSchema);
 
 /* ---------------- Professional (employee) ---------------- */
 export const PRO_STATUSES = ['active', 'inactive'] as const;

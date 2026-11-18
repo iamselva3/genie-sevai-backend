@@ -1,12 +1,14 @@
 import { createApp } from './app';
 import { config } from './config';
 import { connectDb } from './db/connection';
+import { migrate } from './db/migrate';
 import { Category } from './models';
 import { runSeed } from './seed/seed';
 
 export async function startServer(mongoUri = config.mongoUri, port = config.port) {
   await connectDb(mongoUri);
   console.log(`[db] connected`);
+  await migrate();
 
   if (config.seedOnBoot && (await Category.estimatedDocumentCount()) === 0) {
     const summary = await runSeed({ demoBookings: !config.isProduction });

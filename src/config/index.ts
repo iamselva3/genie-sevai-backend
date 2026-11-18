@@ -31,12 +31,16 @@ export const config = {
   },
   /** Minutes east of UTC that slot dates/times are expressed in (330 = IST). */
   tzOffsetMinutes: parseInt(env.TZ_OFFSET_MINUTES || '330', 10),
-  otp: {
-    ttlSeconds: 300,
-    maxAttempts: 5,
-    resendCooldownSeconds: nodeEnv === 'production' ? 30 : 0,
-    /** Outside production the code is returned in the API response so the flow can be tested without SMS. */
-    exposeCode: !isProduction,
+  google: {
+    /** OAuth client IDs whose Google tokens are accepted (GOOGLE_CLIENT_ID plus GOOGLE_ALLOWED_CLIENT_IDS). */
+    clientIds: [env.GOOGLE_CLIENT_ID, ...(env.GOOGLE_ALLOWED_CLIENT_IDS || '').split(',')]
+      .map((id) => (id || '').trim())
+      .filter(Boolean),
+    /**
+     * Tests only: lets the test suites sign in without Google (see services/google.ts).
+     * Ignored when NODE_ENV=production.
+     */
+    testSecret: isProduction ? '' : env.GOOGLE_TEST_SECRET || '',
   },
   slots: {
     startHour: 8,
@@ -47,9 +51,21 @@ export const config = {
     daysAhead: 7,
   },
   uploads: {
-    /** Where uploaded pictures (banners) are stored; served at /uploads. */
+    /**
+     * Where uploaded pictures (banners) go: 'r2' = the Cloudflare R2 bucket (needs the R2 keys below),
+     * 'local' = the UPLOAD_DIR folder on this server. Defaults to r2 when the keys are set.
+     */
+    driver: (env.STORAGE_DRIVER || (env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY ? 'r2' : 'local')).toLowerCase() as 'r2' | 'local',
     dir: path.resolve(env.UPLOAD_DIR || path.join(process.cwd(), 'uploads')),
     maxBytes: 3 * 1024 * 1024,
+    r2: {
+      accountId: env.CLOUDFLARE_ACCOUNT_ID || '',
+      accessKeyId: env.R2_ACCESS_KEY_ID || '',
+      secretAccessKey: env.R2_SECRET_ACCESS_KEY || '',
+      bucket: env.R2_BUCKET_NAME || 'sevai',
+      /** Optional public address of the bucket (custom domain or r2.dev). Without it the API serves the pictures. */
+      publicUrl: (env.R2_PUBLIC_DOMAIN || '').replace(/\/+$/, ''),
+    },
   },
   pricing: {
     visitFee: 79,
@@ -64,7 +80,7 @@ export const config = {
     maxQty: 10,
   },
   rateLimit: {
-    otpPerWindow: nodeEnv === 'production' ? 8 : 1000,
+    signInPerWindow: nodeEnv === 'production' ? 20 : 1000,
     loginPerWindow: nodeEnv === 'production' ? 20 : 1000,
   },
 };

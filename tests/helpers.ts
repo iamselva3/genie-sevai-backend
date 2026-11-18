@@ -4,6 +4,7 @@ import request from 'supertest';
 import { createApp } from '../src/app';
 import { config } from '../src/config';
 import { Service } from '../src/models';
+import { signTestToken } from '../src/services/google';
 import { runSeed } from '../src/seed/seed';
 import { addDays, localDate } from '../src/utils/time';
 
@@ -33,12 +34,21 @@ export function nextPhone() {
   return `8${String(100000000 + phoneCounter).slice(-9)}`;
 }
 
-export async function loginCustomer(phone = nextPhone(), name: string | null = 'Test Customer') {
-  const sent = await api().post('/api/v1/auth/otp/send').send({ phone }).expect(200);
-  const verified = await api().post('/api/v1/auth/otp/verify').send({ phone, code: sent.body.devCode }).expect(200);
-  const token = verified.body.token as string;
-  if (name) await api().patch('/api/v1/me').set(auth(token)).send({ name }).expect(200);
-  return { token, phone, customer: verified.body.customer };
+let googleCounter = 0;
+/** A Google access token the API accepts in tests (see services/google.ts). */
+export function googleToken(profile: { sub?: string; email?: string; name?: string; picture?: string } = {}) {
+  googleCounter += 1;
+  const sub = profile.sub ?? `g-${Date.now()}-${googleCounter}`;
+  return signTestToken({ sub, email: profile.email ?? `${sub}@example.com`, name: profile.name, picture: profile.picture }, config.google.testSecret);
+}
+
+/** Signs a new customer in with Google, then sets their phone (skipped with null) and name (skipped with null). */
+export async function loginCustomer(phone: string | null = nextPhone(), name: string | null = 'Test Customer') {
+  const signedIn = await api().post('/api/v1/auth/google').send({ accessToken: googleToken() }).expect(200);
+  const token = signedIn.body.token as string;
+  const update = { ...(phone ? { phone } : {}), ...(name ? { name } : {}) };
+  if (Object.keys(update).length) await api().patch('/api/v1/me').set(auth(token)).send(update).expect(200);
+  return { token, phone, customer: signedIn.body.customer };
 }
 
 export async function addAddress(token: string, city = 'chennai') {

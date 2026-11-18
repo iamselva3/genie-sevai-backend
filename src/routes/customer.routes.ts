@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { config } from '../config';
 import { optionalCustomer, requireCustomer } from '../middleware/auth';
-import { otpLimiter } from '../middleware/rateLimit';
+import { signInLimiter } from '../middleware/rateLimit';
 import { ADDRESS_LABELS, Booking, BookingDoc, City, Customer, CustomerDoc } from '../models';
 import {
   cancelBooking,
@@ -11,7 +11,7 @@ import {
   rescheduleBooking,
   reviewBooking,
 } from '../services/bookingFlow';
-import { issueOtp, verifyOtp } from '../services/otp';
+import { verifyGoogleAccessToken } from '../services/google';
 import { buildQuote, presentQuote } from '../services/pricing';
 import { signToken } from '../services/tokens';
 import { badRequest, notFound } from '../utils/errors';
@@ -26,6 +26,7 @@ export function presentCustomer(c: CustomerDoc) {
     phone: c.phone,
     name: c.name,
     email: c.email,
+    avatarUrl: c.avatarUrl,
     addresses: c.addresses.map((a) => ({
       id: String(a._id),
       label: a.label,
@@ -39,21 +40,18 @@ export function presentCustomer(c: CustomerDoc) {
   };
 }
 
-/* ---------------- Auth (phone OTP) ---------------- */
+/* ---------------- Auth (Google) ---------------- */
 
-router.post('/auth/otp/send', otpLimiter, async (req, res) => {
-  const body = parse(z.object({ phone }), req.body);
-  const { code, expiresIn } = await issueOtp(body.phone);
-  res.json({ sent: true, expiresIn, ...(config.otp.exposeCode ? { devCode: code } : {}) });
-});
-
-router.post('/auth/otp/verify', otpLimiter, async (req, res) => {
-  const body = parse(z.object({ phone, code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code') }), req.body);
-  await verifyOtp(body.phone, body.code);
-  let customer = await Customer.findOne({ phone: body.phone });
+router.post('/auth/google', signInLimiter, async (req, res) => {
+  const body = parse(z.object({ accessToken: z.string().trim().min(10, 'Sign in with Google again').max(4096) }), req.body);
+  const google = await verifyGoogleAccessToken(body.accessToken);
+  let customer = await Customer.findOne({ googleId: google.sub });
   const isNew = !customer;
-  if (!customer) customer = await Customer.create({ phone: body.phone });
+  if (!customer) customer = new Customer({ googleId: google.sub, name: google.name });
   if (customer.isBlocked) throw badRequest('Your account is on hold. Please contact support.', 'BLOCKED');
+  customer.email = google.email;
+  if (!customer.name && google.name) customer.name = google.name;
+  if (google.picture) customer.avatarUrl = google.picture;
   customer.lastLoginAt = new Date();
   await customer.save();
   res.json({ token: signToken({ sub: String(customer._id), kind: 'customer' }), customer: presentCustomer(customer), isNew });
@@ -69,13 +67,13 @@ router.patch('/me', requireCustomer, async (req, res) => {
   const body = parse(
     z.object({
       name: z.string().trim().min(2, 'Enter your name').max(80).optional(),
-      email: z.string().trim().email('Enter a valid email').max(120).optional().or(z.literal('')),
+      phone: phone.optional(),
     }),
     req.body,
   );
   const customer = req.customer!;
   if (body.name !== undefined) customer.name = body.name;
-  if (body.email !== undefined) customer.email = body.email;
+  if (body.phone !== undefined) customer.phone = body.phone;
   await customer.save();
   res.json({ customer: presentCustomer(customer) });
 });

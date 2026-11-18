@@ -60,7 +60,7 @@ describe('quotes', () => {
 });
 
 describe('placing bookings', () => {
-  it('requires sign-in, a name and a saved address', async () => {
+  it('requires sign-in, a name, a phone number and a saved address', async () => {
     const bath = await serviceId('bathroom-deep-cleaning');
     await api().post('/api/v1/bookings').send({}).expect(401);
 
@@ -72,6 +72,15 @@ describe('placing bookings', () => {
       .send({ city: 'chennai', items: [{ serviceId: bath, qty: 1 }], addressId, ...slot() })
       .expect(400);
     expect(res.body.error.code).toBe('NAME_REQUIRED');
+
+    const noPhone = await loginCustomer(null);
+    const noPhoneAddress = await addAddress(noPhone.token);
+    const phoneless = await api()
+      .post('/api/v1/bookings')
+      .set(auth(noPhone.token))
+      .send({ city: 'chennai', items: [{ serviceId: bath, qty: 1 }], addressId: noPhoneAddress, ...slot() })
+      .expect(400);
+    expect(phoneless.body.error.code).toBe('PHONE_REQUIRED');
 
     const { token } = await loginCustomer();
     const noAddr = await api()

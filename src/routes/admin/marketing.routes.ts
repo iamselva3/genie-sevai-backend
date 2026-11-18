@@ -1,11 +1,10 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import express, { Router } from 'express';
 import { isValidObjectId } from 'mongoose';
 import { z } from 'zod';
 import { config } from '../../config';
 import { Banner, BANNER_ACTIONS, BANNER_ART, BANNER_LAYOUTS } from '../../models';
+import { saveUpload } from '../../services/storage';
 import { AppError, badRequest, notFound } from '../../utils/errors';
 import { objectId, parse } from '../../utils/validate';
 
@@ -32,10 +31,8 @@ router.post(
     if (!Buffer.isBuffer(body) || body.length === 0) throw badRequest('The picture is empty');
     if (!kind.looksRight(body)) throw badRequest('That file is not a valid picture', 'BAD_IMAGE');
 
-    await mkdir(config.uploads.dir, { recursive: true });
-    const name = `${randomBytes(12).toString('hex')}.${kind.ext}`;
-    await writeFile(path.join(config.uploads.dir, name), body);
-    res.status(201).json({ url: `/uploads/${name}`, bytes: body.length });
+    const url = await saveUpload(`${randomBytes(12).toString('hex')}.${kind.ext}`, body);
+    res.status(201).json({ url, bytes: body.length });
   },
 );
 

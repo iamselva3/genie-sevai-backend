@@ -60,6 +60,7 @@ export interface CreateBookingInput {
 }
 
 export async function createBooking(customer: CustomerDoc, input: CreateBookingInput) {
+  if (!customer.phone) throw badRequest('Add your mobile number so the professional can call you', 'PHONE_REQUIRED');
   const address = customer.addresses.id(input.addressId);
   if (!address) throw badRequest('Choose a saved address', 'ADDRESS_REQUIRED');
   if (address.city !== input.city.toLowerCase()) {

@@ -1,40 +1,60 @@
-import { api, auth, loginCustomer, nextPhone, useDatabase } from './helpers';
+import { config } from '../src/config';
+import { api, auth, googleToken, loginCustomer, nextPhone, useDatabase } from './helpers';
 
 useDatabase();
 
-describe('customer OTP sign-in', () => {
-  it('rejects invalid phone numbers', async () => {
-    const res = await api().post('/api/v1/auth/otp/send').send({ phone: '12345' }).expect(400);
-    expect(res.body.error.message).toMatch(/10-digit/);
-  });
+const google = (accessToken: string) => api().post('/api/v1/auth/google').send({ accessToken });
 
-  it('signs in with the right code and creates the customer once', async () => {
-    const phone = nextPhone();
-    const sent = await api().post('/api/v1/auth/otp/send').send({ phone }).expect(200);
-    expect(sent.body.devCode).toMatch(/^\d{6}$/);
-    const first = await api().post('/api/v1/auth/otp/verify').send({ phone, code: sent.body.devCode }).expect(200);
+describe('customer Google sign-in', () => {
+  it('creates the customer once and keeps their Google details', async () => {
+    const sub = `g-asha-${Date.now()}`;
+    const first = await google(googleToken({ sub, email: 'Asha@Example.com', name: 'Asha K', picture: 'https://lh3.googleusercontent.com/a/asha' })).expect(200);
     expect(first.body.isNew).toBe(true);
     expect(first.body.token).toBeTruthy();
+    expect(first.body.customer).toMatchObject({ name: 'Asha K', email: 'asha@example.com', phone: '', avatarUrl: 'https://lh3.googleusercontent.com/a/asha' });
 
-    const again = await api().post('/api/v1/auth/otp/send').send({ phone }).expect(200);
-    const second = await api().post('/api/v1/auth/otp/verify').send({ phone, code: again.body.devCode }).expect(200);
-    expect(second.body.isNew).toBe(false);
-    expect(second.body.customer.id).toBe(first.body.customer.id);
+    const again = await google(googleToken({ sub, email: 'asha.k@example.com', name: 'Someone Else' })).expect(200);
+    expect(again.body.isNew).toBe(false);
+    expect(again.body.customer.id).toBe(first.body.customer.id);
+    // the email follows the Google account; a name the customer already has is kept
+    expect(again.body.customer).toMatchObject({ email: 'asha.k@example.com', name: 'Asha K' });
   });
 
-  it('rejects wrong codes, single-use codes and locks after 5 attempts', async () => {
-    const phone = nextPhone();
-    const sent = await api().post('/api/v1/auth/otp/send').send({ phone }).expect(200);
-    const wrong = sent.body.devCode === '000000' ? '111111' : '000000';
-    await api().post('/api/v1/auth/otp/verify').send({ phone, code: wrong }).expect(400);
-    await api().post('/api/v1/auth/otp/verify').send({ phone, code: sent.body.devCode }).expect(200);
-    // used code cannot be replayed
-    await api().post('/api/v1/auth/otp/verify').send({ phone, code: sent.body.devCode }).expect(400);
+  it('rejects forged and malformed tokens', async () => {
+    const [head, payload] = googleToken().split('.');
+    await google(`${head}.${payload}.${Buffer.from('forged-signature-0123456789abcdef').toString('base64url')}`).expect(401);
+    await google('test.bm90LWpzb24.c2ln').expect(401);
+    await api().post('/api/v1/auth/google').send({}).expect(400);
+  });
 
-    const fresh = await api().post('/api/v1/auth/otp/send').send({ phone }).expect(200);
-    const bad = fresh.body.devCode === '000000' ? '111111' : '000000';
-    for (let i = 0; i < 5; i += 1) await api().post('/api/v1/auth/otp/verify').send({ phone, code: bad }).expect(400);
-    await api().post('/api/v1/auth/otp/verify').send({ phone, code: fresh.body.devCode }).expect(429);
+  describe('real Google tokens', () => {
+    const fetchSpy = jest.spyOn(globalThis, 'fetch');
+    afterEach(() => fetchSpy.mockReset());
+    afterAll(() => fetchSpy.mockRestore());
+
+    const googleSays = (tokeninfo: Record<string, unknown>, ok = true) =>
+      fetchSpy.mockImplementation(async (url) =>
+        String(url).includes('tokeninfo')
+          ? new Response(JSON.stringify(tokeninfo), { status: ok ? 200 : 400 })
+          : new Response(JSON.stringify({ name: 'Ravi Kumar', picture: 'https://lh3.googleusercontent.com/a/ravi' }), { status: 200 }),
+      );
+    const clientId = config.google.clientIds[0];
+
+    it('accepts a token issued to our client for a verified email', async () => {
+      googleSays({ aud: clientId, azp: clientId, sub: `g-ravi-${Date.now()}`, email: 'ravi@example.com', email_verified: 'true' });
+      const res = await google('ya29.real-looking-access-token').expect(200);
+      expect(res.body.customer).toMatchObject({ email: 'ravi@example.com', name: 'Ravi Kumar' });
+      expect(String(fetchSpy.mock.calls[0][0])).toContain('oauth2.googleapis.com/tokeninfo');
+    });
+
+    it('rejects tokens for another app, unverified emails and expired tokens', async () => {
+      googleSays({ aud: 'someone-else.apps.googleusercontent.com', sub: 'g-x', email: 'x@example.com', email_verified: 'true' });
+      expect((await google('ya29.other-app-token').expect(401)).body.error.code).toBe('GOOGLE_WRONG_CLIENT');
+      googleSays({ aud: clientId, sub: 'g-y', email: 'y@example.com', email_verified: 'false' });
+      expect((await google('ya29.unverified-token').expect(401)).body.error.code).toBe('GOOGLE_UNVERIFIED');
+      googleSays({ error_description: 'Invalid Value' }, false);
+      expect((await google('ya29.expired-token').expect(401)).body.error.code).toBe('GOOGLE_INVALID');
+    });
   });
 
   it('protects profile routes', async () => {
@@ -44,11 +64,15 @@ describe('customer OTP sign-in', () => {
 });
 
 describe('profile & addresses', () => {
-  it('updates the profile', async () => {
-    const { token } = await loginCustomer(undefined, null);
-    const res = await api().patch('/api/v1/me').set(auth(token)).send({ name: 'Asha', email: 'asha@example.com' }).expect(200);
-    expect(res.body.customer).toMatchObject({ name: 'Asha', email: 'asha@example.com' });
-    await api().patch('/api/v1/me').set(auth(token)).send({ email: 'not-an-email' }).expect(400);
+  it('updates the name and mobile number (the email stays the Google one)', async () => {
+    const { token, customer } = await loginCustomer(null, null);
+    const phone = nextPhone();
+    const res = await api().patch('/api/v1/me').set(auth(token)).send({ name: 'Asha', phone, email: 'other@example.com' }).expect(200);
+    expect(res.body.customer).toMatchObject({ name: 'Asha', phone, email: customer.email });
+    await api().patch('/api/v1/me').set(auth(token)).send({ phone: '12345' }).expect(400);
+    // family members can share one contact number
+    const other = await loginCustomer(phone);
+    expect(other.phone).toBe(phone);
   });
 
   it('manages addresses with a single default', async () => {
