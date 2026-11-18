@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { z } from 'zod';
 import { optionalCustomer } from '../middleware/auth';
 import { Booking, Category, City, Coupon, Enquiry, ProApplication, Professional, Service } from '../models';
+import { liveBanners } from '../services/banners';
 import { findCityBySlug, presentCategory, presentService, visibleCategories } from '../services/catalog';
 import { slotDays } from '../services/slots';
 import { badRequest, notFound } from '../utils/errors';
@@ -28,13 +29,14 @@ router.get('/catalog/home', async (req, res) => {
     .limit(12)
     .populate('category');
 
-  const [pros, completed, ratingAgg] = await Promise.all([
+  const [pros, completed, ratingAgg, banners] = await Promise.all([
     Professional.countDocuments({ status: 'active', ...(city ? { city: city._id } : {}) }),
     Booking.countDocuments({ status: 'completed' }),
     Professional.aggregate<{ avg: number }>([
       { $match: { status: 'active', ratingCount: { $gt: 0 } } },
       { $group: { _id: null, avg: { $avg: '$rating' } } },
     ]),
+    liveBanners(city),
   ]);
 
   // A few category "shelves" for the home page (first visible categories that have bookable services).
@@ -53,6 +55,7 @@ router.get('/catalog/home', async (req, res) => {
   res.json({
     city: city ? { slug: city.slug, name: city.name } : null,
     categories,
+    banners,
     rows,
     popular: popularDocs.map((s) => presentService(s, s.category as never, city)),
     stats: {

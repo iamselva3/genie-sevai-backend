@@ -1,3 +1,4 @@
+import path from 'node:path';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -44,6 +45,11 @@ export const config = {
     /** A slot must start at least this many minutes from now. */
     leadMinutes: 90,
     daysAhead: 7,
+  },
+  uploads: {
+    /** Where uploaded pictures (banners) are stored; served at /uploads. */
+    dir: path.resolve(env.UPLOAD_DIR || path.join(process.cwd(), 'uploads')),
+    maxBytes: 3 * 1024 * 1024,
   },
   pricing: {
     visitFee: 79,

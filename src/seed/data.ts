@@ -285,3 +285,47 @@ export const COUPONS = [
   { code: 'GENIE20', description: '20% off up to ₹300 on orders above ₹999', type: 'percent' as const, value: 20, maxDiscount: 300, minOrder: 999, perCustomerLimit: 3 },
   { code: 'COOL200', description: 'Flat ₹200 off AC jobs above ₹1,499', type: 'flat' as const, value: 200, minOrder: 1499, perCustomerLimit: 2 },
 ];
+
+/** Home page banners (solid colours; built-in illustrations until the team uploads photos). */
+export const BANNERS = [
+  {
+    eyebrow: 'Bathroom deep clean',
+    title: 'Shine, shine',
+    subtitle: 'Tiles, taps and glass, scrubbed back to new.',
+    art: 'bathroom' as const,
+    background: '#D7F0EA',
+    textTone: 'dark' as const,
+    action: 'service' as const,
+    target: 'bathroom-deep-cleaning',
+  },
+  {
+    eyebrow: 'Use code WELCOME100',
+    title: 'Flat ₹100 off',
+    subtitle: 'On your first booking above ₹499',
+    art: 'gift' as const,
+    background: '#5B3FD9',
+    textTone: 'light' as const,
+    action: 'coupon' as const,
+    target: 'WELCOME100',
+  },
+  {
+    eyebrow: 'Summer-ready',
+    title: 'AC service, cool in an hour',
+    subtitle: 'Foam-jet clean, gas check and a cooling test.',
+    art: 'ac' as const,
+    background: '#CDE8FF',
+    textTone: 'dark' as const,
+    action: 'service' as const,
+    target: 'foam-jet-ac-service-split',
+  },
+  {
+    eyebrow: 'Use code GENIE20',
+    title: '20% off, up to ₹300',
+    subtitle: 'On bookings above ₹999',
+    art: 'gift' as const,
+    background: '#FFD43B',
+    textTone: 'dark' as const,
+    action: 'coupon' as const,
+    target: 'GENIE20',
+  },
+];

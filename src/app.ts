@@ -50,6 +50,16 @@ export function createApp() {
     res.json({ status: 'ok', service: 'genie-sevai-api', time: new Date().toISOString() });
   });
 
+  // Uploaded pictures: public, immutable (random names), loadable from the web and admin origins.
+  app.use(
+    '/uploads',
+    (_req, res, next) => {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      next();
+    },
+    express.static(config.uploads.dir, { index: false, dotfiles: 'deny', maxAge: '365d', immutable: true }),
+  );
+
   app.use('/api/v1', routes);
   app.use(notFoundHandler);
   app.use(errorHandler);

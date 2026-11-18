@@ -3,6 +3,7 @@ import { requireStaff } from '../middleware/auth';
 import adminAuth from './admin/auth.routes';
 import adminBookings from './admin/bookings.routes';
 import adminCatalog from './admin/catalog.routes';
+import adminMarketing from './admin/marketing.routes';
 import adminOps from './admin/ops.routes';
 import adminPeople from './admin/people.routes';
 import customer from './customer.routes';
@@ -14,7 +15,7 @@ const admin = Router();
 admin.use(adminAuth);
 // ...everything after this needs a signed-in staff member.
 admin.use(requireStaff());
-admin.use(adminCatalog, adminBookings, adminPeople, adminOps);
+admin.use(adminCatalog, adminBookings, adminPeople, adminOps, adminMarketing);
 
 const router = Router();
 router.use('/', publicRoutes);

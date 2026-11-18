@@ -1,10 +1,10 @@
 import { config } from '../config';
-import { AdminUser, Booking, Category, City, Coupon, Customer, Professional, Service } from '../models';
+import { AdminUser, Banner, Booking, Category, City, Coupon, Customer, Professional, Service } from '../models';
 import { generateCode, generatePin } from '../services/bookingFlow';
 import { hashPassword } from '../services/tokens';
 import { slugify } from '../utils/slugify';
 import { addDays, addMinutes, localDate, slotInstant } from '../utils/time';
-import { CATEGORIES, CITIES, COUPONS, FIRST_NAMES, flattenServices, LAST_NAMES } from './data';
+import { BANNERS, CATEGORIES, CITIES, COUPONS, FIRST_NAMES, flattenServices, LAST_NAMES } from './data';
 
 export const SEED_PRO_PASSWORD = 'Pro@12345';
 export const SEED_MANAGER = { email: 'ops@sevai.in', password: 'Ops@12345' };
@@ -89,6 +89,7 @@ export async function runSeed(opts: { demoBookings?: boolean } = {}) {
   ]);
 
   await Coupon.insertMany(COUPONS);
+  await Banner.insertMany(BANNERS.map((b, i) => ({ ...b, sortOrder: i })));
 
   let bookings = 0;
   if (opts.demoBookings) bookings = await seedDemoBookings();
@@ -99,6 +100,7 @@ export async function runSeed(opts: { demoBookings?: boolean } = {}) {
     services: services.length,
     professionals: professionals.length,
     coupons: COUPONS.length,
+    banners: BANNERS.length,
     bookings,
   };
 }
